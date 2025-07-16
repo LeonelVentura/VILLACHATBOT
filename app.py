@@ -11,6 +11,7 @@ from datetime import datetime
 import unicodedata
 from openai import OpenAI
 import tiktoken
+import docx  # Para procesar documentos Word
 
 # --- Configuración de la Aplicación ---
 MAX_PDF_PAGES = 50         # Límite de páginas por PDF
@@ -127,6 +128,8 @@ def get_openai_response(system_prompt, user_prompt, chat_history):
 def validar_estudiante(codigo):
     try:
         codigo = str(codigo).strip()
+        if codigo == "area@unfv.edu.pe":
+            return True, "Ingeniero Alejandro Roa", "Ingeniero Alejandro Roa"
         excel_path = "Estudiante.xlsx"
         if not os.path.exists(excel_path):
             st.error(f"❌ Archivo '{excel_path}' no encontrado.")
@@ -141,6 +144,28 @@ def validar_estudiante(codigo):
     except Exception as e:
         st.error(f"❌ Error de validación: {e}")
         return False, None, 'Desconocido'
+
+# --- Función para procesar archivos subidos ---
+def process_uploaded_file(uploaded_file):
+    if uploaded_file is not None:
+        file_type = uploaded_file.type
+        if file_type == "application/pdf":
+            with fitz.open(stream=uploaded_file.read(), filetype="pdf") as doc:
+                text = " ".join(page.get_text() for page in doc)
+            st.success("PDF subido y procesado exitosamente.")
+            return text
+        elif file_type in ["image/jpeg", "image/png"]:
+            st.image(uploaded_file, caption="Imagen subida")
+            st.success("Imagen subida exitosamente.")
+            return None  # O procesar con OCR si se desea, pero por ahora solo mostrar
+        elif file_type == "application/vnd.openxmlformats-officedocument.wordprocessingml.document":
+            doc = docx.Document(uploaded_file)
+            text = "\n".join([para.text for para in doc.paragraphs])
+            st.success("Documento Word subido y procesado exitosamente.")
+            return text
+        else:
+            st.error("Tipo de archivo no soportado.")
+            return None
 
 # --- Interfaz Principal ---
 def main():
@@ -175,7 +200,7 @@ def main():
     if not st.session_state.authenticated:
         st.subheader("🔒 Acceso de Estudiante")
         with st.form("login_form"):
-            codigo = st.text_input("Código de estudiante:", type="password")
+            codigo = st.text_input("Código de estudiante o correo:", type="password")
             submitted = st.form_submit_button("Validar Identidad", use_container_width=True)
             if submitted:
                 is_valid, student_name, professor_name = validar_estudiante(codigo)
@@ -192,10 +217,17 @@ def main():
         return
 
     # Interfaz de chat
-    st.subheader(f"Estudiante: {st.session_state.student_name}")
+    st.subheader(f"Usuario: {st.session_state.student_name}")
     for message in st.session_state.messages:
         with st.chat_message(message["role"], avatar="👨‍🎓" if message["role"] == "user" else "🤖"):
             st.markdown(message["content"])
+
+    # Sección para subir archivos
+    st.sidebar.subheader("Subir Archivos")
+    uploaded_file = st.sidebar.file_uploader("Sube PDF, imagen o Word", type=["pdf", "jpg", "png", "docx"])
+    file_content = process_uploaded_file(uploaded_file)
+    if file_content:
+        st.sidebar.text_area("Contenido extraído (si aplica):", file_content, height=150)
 
     if prompt := st.chat_input(f"Pregúntame algo, {st.session_state.student_name.split()[0]}..."):
         st.session_state.messages.append({"role": "user", "content": prompt})
@@ -220,7 +252,7 @@ def main():
                         prompt_tokens = len(ENCODER.encode(prompt))
                         tokens_available = MAX_CONTEXT_TOKENS - prompt_tokens - 1500
                         for chunk in relevant_chunks:
-                            chunk_content = f"Fuente: {chunk['source']}\nContenido: {chunk['text']}\n\n---\n\n"
+                            chunk_content = f"Fuente: {chunk['source']} }\nContenido: {chunk['text']}\n\n---\n\n"
                             chunk_tokens = len(ENCODER.encode(chunk_content))
                             if tokens_available - chunk_tokens >= 0:
                                 context_text += chunk_content
