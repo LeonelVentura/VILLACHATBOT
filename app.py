@@ -252,7 +252,7 @@ def main():
                         prompt_tokens = len(ENCODER.encode(prompt))
                         tokens_available = MAX_CONTEXT_TOKENS - prompt_tokens - 1500
                         for chunk in relevant_chunks:
-                            chunk_content = f"Fuente: {chunk['source']} }\nContenido: {chunk['text']}\n\n---\n\n"
+                            chunk_content = f"Fuente: {chunk['source']} \nContenido: {chunk['text']}\n\n---\n\n"
                             chunk_tokens = len(ENCODER.encode(chunk_content))
                             if tokens_available - chunk_tokens >= 0:
                                 context_text += chunk_content
